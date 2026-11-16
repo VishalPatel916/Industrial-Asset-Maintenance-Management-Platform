@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AuraOps.Api/AuraOps.Api.csproj" />
+    <Project Path="src/AuraOps.Application/AuraOps.Application.csproj" />
+    <Project Path="src/AuraOps.Domain/AuraOps.Domain.csproj" />
+    <Project Path="src/AuraOps.Infrastructure/AuraOps.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AuraOps.IntegrationTests/AuraOps.IntegrationTests.csproj" />
+    <Project Path="tests/AuraOps.UnitTests/AuraOps.UnitTests.csproj" />
+  </Folder>
+</Solution>

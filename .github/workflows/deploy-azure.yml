@@ -1,0 +1,73 @@
+name: Deploy to Azure
+
+# Manual, opt-in deployment. Nothing here runs until the Azure resources and secrets below exist.
+# See docs/azure-deployment.md for the one-time setup.
+#
+# Required repository secrets:
+#   AZURE_CREDENTIALS            service principal JSON for azure/login (or switch to OIDC)
+#   AZURE_SQL_CONNECTION_STRING  connection used ONLY by the migration step (DDL rights)
+#   AZURE_STATIC_WEB_APPS_TOKEN  deployment token of the Static Web App
+# Required repository variables:
+#   AZURE_WEBAPP_NAME            App Service name for the API
+#   API_BASE_URL                 e.g. https://auraops-api.azurewebsites.net
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-api:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Test
+        working-directory: backend
+        run: dotnet test -c Release
+      - name: Publish API
+        working-directory: backend
+        run: dotnet publish src/AuraOps.Api -c Release -o ../publish/api
+      - name: Apply EF Core migrations (controlled step)
+        working-directory: backend
+        env:
+          AURAOPS_MIGRATIONS_CONNECTION: ${{ secrets.AZURE_SQL_CONNECTION_STRING }}
+        run: |
+          dotnet tool restore
+          dotnet ef database update -p src/AuraOps.Infrastructure -s src/AuraOps.Api --configuration Release
+      - uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.AZURE_WEBAPP_NAME }}
+          package: publish/api
+      - name: Smoke test
+        run: curl --fail --retry 10 --retry-delay 10 "${{ vars.API_BASE_URL }}/health"
+
+  deploy-web:
+    runs-on: ubuntu-latest
+    needs: deploy-api
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Build
+        working-directory: frontend
+        env:
+          VITE_API_BASE_URL: ${{ vars.API_BASE_URL }}
+        run: |
+          npm ci
+          npm run build
+      - uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_TOKEN }}
+          action: upload
+          app_location: frontend/dist
+          skip_app_build: true
